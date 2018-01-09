@@ -9,6 +9,7 @@ module Jekyll
       fetch_languages
       @parallel_localization = config.fetch('parallel_localization', true)
       @exclude_from_localization = config.fetch('exclude_from_localization', [])
+      @parallel_batchsize = config.fetch('parallel_localization_batchsize', 4)
     end
 
     def fetch_languages
@@ -24,26 +25,42 @@ module Jekyll
       prepare
       all_langs = (@languages + [@default_lang]).uniq
       if @parallel_localization
-        pids = {}
-        all_langs.each do |lang|
-          pids[lang] = fork do
-            process_language lang
-          end
-        end
-        Signal.trap('INT') do
-          all_langs.each do |lang|
-            puts "Killing #{pids[lang]} : #{lang}"
-            kill('INT', pids[lang])
-          end
-        end
-        all_langs.each do |lang|
-          waitpid pids[lang]
-          detach pids[lang]
-        end
+        process_batch(build_batch(all_langs, @parallel_batchsize))
       else
         all_langs.each do |lang|
           process_language lang
         end
+      end
+    end
+
+    def build_batch(list, batch_size)
+      list.reduce([[]]) do |acc,item|
+        if acc[-1].count < batch_size
+          acc[-1] << item
+        else 
+          acc << [item]
+        end
+        acc
+      end
+    end
+
+    def process_batch(all_langs)
+      pids = {}
+      puts "Running batch: #{all_langs.inspect}"
+      all_langs.each do |lang|
+        pids[lang] = fork do
+          process_language lang
+        end
+      end
+      Signal.trap('INT') do
+        all_langs.each do |lang|
+          puts "Killing #{pids[lang]} : #{lang}"
+          kill('INT', pids[lang])
+        end
+      end
+      all_langs.each do |lang|
+        waitpid pids[lang]
+        detach pids[lang]
       end
     end
 
