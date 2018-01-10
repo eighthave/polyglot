@@ -25,7 +25,10 @@ module Jekyll
       prepare
       all_langs = (@languages + [@default_lang]).uniq
       if @parallel_localization
-        process_batch(build_batch(all_langs, @parallel_batchsize))
+        batches = build_batches(all_langs, @parallel_batchsize)
+        batches.each do |batch|
+          process_batch(batch)
+        end
       else
         all_langs.each do |lang|
           process_language lang
@@ -33,7 +36,7 @@ module Jekyll
       end
     end
 
-    def build_batch(list, batch_size)
+    def build_batches(list, batch_size)
       list.reduce([[]]) do |acc,item|
         if acc[-1].count < batch_size
           acc[-1] << item
